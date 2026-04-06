@@ -1,0 +1,5 @@
+{
+  "name": "Redis Demo Platform",
+  "description": "Plateforme de démonstration pour un webinaire technique sur Redis",
+  "requestFramePermissions": []
+}
