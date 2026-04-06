@@ -1,0 +1,16 @@
+server:
+  port: 8088
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/demo}
+    username: ${SPRING_DATASOURCE_USERNAME:demo}
+    password: ${SPRING_DATASOURCE_PASSWORD:demo}
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: 6379

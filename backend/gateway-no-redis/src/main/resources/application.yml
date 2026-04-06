@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+gateway:
+  routes:
+    - path: /api/hello
+      destination: service-a
+      active: true
+    - path: /api/orders
+      destination: service-b
+      active: true
+    - path: /api/users
+      destination: service-c
+      active: true

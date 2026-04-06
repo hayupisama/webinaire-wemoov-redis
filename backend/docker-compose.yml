@@ -1,0 +1,92 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-demo
+    ports: ["6379:6379"]
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: redis-demo-postgres
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    ports: ["5432:5432"]
+
+  gateway-no-redis:
+    build: ./gateway-no-redis
+    container_name: redis-demo-gateway-no-redis
+    ports: ["8081:8080"]
+
+  gateway-redis:
+    build: ./gateway-redis
+    container_name: redis-demo-gateway-redis
+    ports: ["8082:8080"]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on: [redis]
+
+  rate-limiting-no-redis:
+    build: ./rate-limiting-no-redis
+    container_name: redis-demo-ratelimit-no-redis
+    ports: ["8083:8080"]
+
+  rate-limiting-redis:
+    build: ./rate-limiting-redis
+    container_name: redis-demo-ratelimit-redis
+    ports: ["8084:8080"]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on: [redis]
+
+  streams-producer:
+    build: ./streams-producer
+    container_name: redis-demo-streams-producer
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SERVER_SERVLET_CONTEXT_PATH: /producer
+    depends_on: [redis]
+
+  streams-consumer:
+    build: ./streams-consumer
+    container_name: redis-demo-consumer
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SERVER_SERVLET_CONTEXT_PATH: /consumer
+    depends_on: [redis, streams-producer]
+
+  streams-proxy:
+    image: nginx:alpine
+    container_name: redis-demo-streams-proxy
+    ports: ["8085:80"]
+    volumes:
+      - ./nginx/streams.conf:/etc/nginx/conf.d/default.conf
+    depends_on: [streams-producer, streams-consumer]
+
+  locks:
+    build: ./locks
+    container_name: redis-demo-locks
+    ports: ["8086:8080"]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on: [redis]
+
+  geo:
+    build: ./geo
+    container_name: redis-demo-geo
+    ports: ["8087:8080"]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on: [redis]
+
+  ttl:
+    build: ./ttl
+    container_name: redis-demo-ttl
+    ports: ["8088:8080"]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo
+      SPRING_DATASOURCE_USERNAME: demo
+      SPRING_DATASOURCE_PASSWORD: demo
+    depends_on: [redis, postgres]

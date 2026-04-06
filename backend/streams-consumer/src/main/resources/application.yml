@@ -1,0 +1,10 @@
+server:
+  port: 8080
+  servlet:
+    context-path: ${SERVER_SERVLET_CONTEXT_PATH:/consumer}
+
+spring:
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: 6379
