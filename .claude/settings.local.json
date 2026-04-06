@@ -4,7 +4,12 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx ng:*)",
+      "Bash(chmod +x /home/hayupi/Téléchargements/redis-demo-platform/demo.sh)",
+      "Bash(bash -n /home/hayupi/Téléchargements/redis-demo-platform/demo.sh)",
+      "Bash(grep -oP '`[^`]+`')"
     ]
   }
 }

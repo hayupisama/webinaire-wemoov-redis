@@ -7,7 +7,6 @@ import java.util.Map;
 
 @RestController
 @CrossOrigin("*")
-@RequestMapping("/api/rate")
 public class RateLimitController {
 
     private final RateLimitService service;
@@ -21,18 +20,18 @@ public class RateLimitController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/counter")
+    @GetMapping("/api/rate/counter")
     public Map<String, Integer> getCounter(@RequestParam String instance) {
         return Map.of("count", service.getCounter(instance));
     }
 
-    @PostMapping("/hit")
+    @PostMapping("/api/rate/hit")
     public ResponseEntity<Void> hit(@RequestParam String instance) {
         int status = service.hit(instance);
         return ResponseEntity.status(status).build();
     }
 
-    @PostMapping("/reset")
+    @PostMapping("/api/rate/reset")
     public ResponseEntity<Void> reset() {
         service.reset();
         return ResponseEntity.ok().build();

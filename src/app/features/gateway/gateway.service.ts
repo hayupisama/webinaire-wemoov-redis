@@ -32,13 +32,25 @@ export class GatewayService {
     );
   }
 
-  getHello(withRedis: boolean): Observable<HelloResponse> {
+  getNoRedisRoutes(): Observable<RouteDef[]> {
+    return this.http.get<RouteDef[]>(`${this.urlNoRedis}/api/routes`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  getRoutes(): Observable<RouteDef[]> {
+    return this.http.get<RouteDef[]>(`${this.urlRedis}/api/routes`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  callEndpoint(withRedis: boolean, path: string): Observable<HelloResponse> {
     const url = withRedis ? this.urlRedis : this.urlNoRedis;
     const start = performance.now();
-    return this.http.get<{message?: string, targetService?: string}>(`${url}/api/hello`).pipe(
+    return this.http.get<{ message?: string; targetService?: string }>(`${url}${path}`).pipe(
       map(res => ({
-        message: res.message || 'Hello World',
-        targetService: res.targetService || 'Unknown Service',
+        message: res.message || 'OK',
+        targetService: res.targetService || path,
         durationMs: Math.round(performance.now() - start)
       })),
       catchError(() => of({
@@ -47,12 +59,6 @@ export class GatewayService {
         durationMs: Math.round(performance.now() - start),
         error: true
       }))
-    );
-  }
-
-  getRoutes(): Observable<RouteDef[]> {
-    return this.http.get<RouteDef[]>(`${this.urlRedis}/api/routes`).pipe(
-      catchError(() => of([]))
     );
   }
 

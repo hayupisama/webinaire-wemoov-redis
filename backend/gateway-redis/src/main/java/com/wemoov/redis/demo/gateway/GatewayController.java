@@ -1,5 +1,6 @@
 package com.wemoov.redis.demo.gateway;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -25,27 +26,28 @@ public class GatewayController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/api/hello")
-    public ResponseEntity<?> hello() {
+    @GetMapping("/api/**")
+    public ResponseEntity<?> handleRoute(HttpServletRequest request) {
         long start = System.currentTimeMillis();
+        String path = request.getRequestURI();
 
-        return routeService.getRoute("/api/hello").map(route -> {
+        return routeService.getRoute(path).map(route -> {
             if (route.maintenance()) {
-                log.warn("[GW-Redis] GET /api/hello → MAINTENANCE mode");
+                log.warn("[GW-Redis] GET {} → MAINTENANCE mode", path);
                 return ResponseEntity.status(503)
                         .<Map<String, Object>>body(Map.of("error", "Service en maintenance"));
             }
             try { Thread.sleep(20); } catch (InterruptedException ignored) {}
             long duration = System.currentTimeMillis() - start;
-            log.info("[GW-Redis] GET /api/hello → destination='{}' duration={}ms",
-                    route.destination(), duration);
+            log.info("[GW-Redis] GET {} → destination='{}' duration={}ms",
+                    path, route.destination(), duration);
             return ResponseEntity.ok(Map.of(
                     "message",       "Hello from " + route.destination(),
                     "targetService", route.destination(),
                     "durationMs",    duration
             ));
         }).orElseGet(() -> {
-            log.error("[GW-Redis] GET /api/hello → route NOT FOUND in Redis");
+            log.error("[GW-Redis] GET {} → route NOT FOUND in Redis", path);
             return ResponseEntity.status(404)
                     .<Map<String, Object>>body(Map.of("error", "Route introuvable"));
         });

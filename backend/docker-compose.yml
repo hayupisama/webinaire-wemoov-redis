@@ -5,6 +5,12 @@ services:
     ports: ["6379:6379"]
     command: redis-server --appendonly yes
 
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: redis-demo-insight
+    ports: ["5540:5540"]
+    depends_on: [redis]
+
   postgres:
     image: postgres:16-alpine
     container_name: redis-demo-postgres

@@ -12,3 +12,6 @@ gateway:
     - path: /api/users
       destination: service-c
       active: true
+    - path: /api/nouvelleroute
+      destination: service-d
+      active: true

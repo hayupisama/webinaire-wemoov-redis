@@ -1,10 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, WritableSignal } from '@angular/core';
 import { ReactiveFormsModule, FormGroup, FormControl } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { GatewayService, HelloResponse, RouteDef } from './gateway.service';
-import { interval, switchMap, filter } from 'rxjs';
+import { interval, switchMap, filter, forkJoin, EMPTY } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgClass } from '@angular/common';
+import { map } from 'rxjs/operators';
+
+type AnimState = 'idle' | 'departing' | 'sending' | 'returning';
 
 @Component({
   selector: 'app-gateway',
@@ -19,7 +22,7 @@ import { NgClass } from '@angular/common';
       </div>
 
       <div class="grid grid-cols-2 gap-8 flex-1 min-h-0">
-        
+
         <!-- COLONNE GAUCHE : Sans Redis -->
         <div class="bg-[var(--bg-surface)] rounded-[var(--radius-card)] border border-[var(--border-main)] flex flex-col overflow-hidden">
           <!-- Header -->
@@ -30,7 +33,6 @@ import { NgClass } from '@angular/common';
                 Sans Redis
               </span>
             </div>
-            <!-- Status Indicator -->
             <div class="flex items-center gap-2 text-sm font-medium" [ngClass]="healthNoRedis() ? 'text-emerald-400' : 'text-rose-400'">
               <div class="w-2 h-2 rounded-full" [ngClass]="healthNoRedis() ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'"></div>
               {{ healthNoRedis() ? 'En ligne' : 'Hors ligne' }}
@@ -39,39 +41,66 @@ import { NgClass } from '@angular/common';
 
           <!-- Body -->
           <div class="p-6 flex-1 overflow-y-auto flex flex-col gap-6">
-            
+
             <!-- Info Box -->
             <div class="p-4 rounded-[var(--radius-inner)] bg-[var(--accent)]/10 border border-[var(--accent)]/20 flex gap-3 text-[var(--accent)]">
               <mat-icon class="shrink-0">info</mat-icon>
               <div class="text-sm leading-relaxed">
                 <strong>Pour modifier une route :</strong><br>
-                Éditer le fichier <code class="bg-black/20 px-1 py-0.5 rounded">application.yml</code> puis redémarrer le service Spring Boot.
+                Éditer <code class="bg-black/20 px-1 py-0.5 rounded">application.yml</code> puis redémarrer le service.
               </div>
             </div>
 
             <!-- Action & Animation -->
             <div class="flex flex-col gap-4">
               <!-- Animation Client/Server -->
-              <div class="relative h-16 bg-black/20 rounded-xl px-4 border border-[var(--border-main)] flex items-center justify-between overflow-hidden">
-                <div class="absolute left-10 right-10 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-[var(--border-main)]"></div>
-                
-                <div class="relative z-10 flex flex-col items-center bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
-                  <svg viewBox="0 0 250 250" class="w-5 h-5"><path fill="#DD0031" d="M125 30L31.9 63.2l14.2 123.1L125 230l78.9-43.7 14.2-123.1z"/><path fill="#C3002F" d="M125 30v22.2-.1V230l78.9-43.7 14.2-123.1L125 30z"/><path fill="#FFA3B1" d="M125 52.1L66.8 182.6h21.7l11.7-29.2h49.4l11.7 29.2H183L125 52.1zm17 83.3h-34l17-40.9 17 40.9z"/></svg>
-                </div>
-
-                <div class="absolute top-1/2 -translate-y-1/2 z-20 transition-all duration-300 ease-in-out flex items-center justify-center"
-                     [ngClass]="{
-                       'left-10 opacity-0 scale-50': animStateNoRedis() === 'idle',
-                       'left-[calc(100%-3.5rem)] opacity-100 scale-100': animStateNoRedis() === 'sending',
-                       'left-10 opacity-100 scale-100': animStateNoRedis() === 'returning'
-                     }">
-                  <div class="bg-[var(--accent)] text-white p-1 rounded-full shadow-[0_0_10px_var(--accent)] flex items-center justify-center">
-                    <mat-icon class="text-[14px] w-[14px] h-[14px]">{{ animStateNoRedis() === 'returning' ? 'mark_email_read' : 'mail' }}</mat-icon>
+              <div class="bg-black/20 rounded-xl border border-[var(--border-main)] p-3">
+                <div class="flex items-stretch gap-2">
+                  <!-- Angular icon (Client) -->
+                  <div class="flex-shrink-0 w-10 flex flex-col items-center justify-center gap-1">
+                    <div class="bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
+                      <svg viewBox="0 0 250 250" class="w-5 h-5"><path fill="#DD0031" d="M125 30L31.9 63.2l14.2 123.1L125 230l78.9-43.7 14.2-123.1z"/><path fill="#C3002F" d="M125 30v22.2-.1V230l78.9-43.7 14.2-123.1L125 30z"/><path fill="#FFA3B1" d="M125 52.1L66.8 182.6h21.7l11.7-29.2h49.4l11.7 29.2H183L125 52.1zm17 83.3h-34l17-40.9 17 40.9z"/></svg>
+                    </div>
+                    <span class="text-[9px] text-[var(--text-secondary)]">Client</span>
                   </div>
-                </div>
 
-                <div class="relative z-10 flex flex-col items-center bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
-                  <mat-icon class="text-emerald-500 w-5 h-5 text-[20px] leading-none">dns</mat-icon>
+                  <!-- Endpoint lanes -->
+                  <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+                    @for (route of noRedisEndpoints(); track route.path) {
+                      <div class="relative h-6 flex items-center overflow-hidden">
+                        <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--border-main)]"></div>
+                        <span class="relative z-10 text-[9px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] px-1 rounded">{{ route.path }}</span>
+                        @if (lastResNoRedis()[route.path]; as res) {
+                          <span class="absolute right-0 z-10 text-[9px] font-mono bg-[var(--bg-surface)] px-1 rounded"
+                                [ngClass]="res.error ? 'text-rose-400' : 'text-emerald-400'">
+                            {{ res.error ? 'ERR' : res.durationMs + 'ms' }}
+                          </span>
+                        }
+                        <!-- Ball -->
+                        <div class="absolute top-1/2 -translate-y-1/2 z-20 transition-all duration-300 ease-in-out"
+                             [ngClass]="getBallClasses(animStatesNoRedis(), route.path)">
+                          <div class="bg-[var(--accent)] text-white p-0.5 rounded-full shadow-[0_0_6px_var(--accent)] flex items-center justify-center">
+                            <mat-icon class="text-[10px] w-[10px] h-[10px] leading-none">
+                              {{ (animStatesNoRedis()[route.path] ?? 'idle') === 'returning' ? 'mark_email_read' : 'mail' }}
+                            </mat-icon>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                    @if (noRedisEndpoints().length === 0) {
+                      <div class="flex items-center justify-center h-8 text-[10px] text-[var(--text-secondary)] italic">
+                        Aucun endpoint — backend hors ligne
+                      </div>
+                    }
+                  </div>
+
+                  <!-- Server icon -->
+                  <div class="flex-shrink-0 w-10 flex flex-col items-center justify-center gap-1">
+                    <div class="bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
+                      <mat-icon class="text-emerald-500 w-5 h-5 text-[20px] leading-none">dns</mat-icon>
+                    </div>
+                    <span class="text-[9px] text-[var(--text-secondary)]">Serveur</span>
+                  </div>
                 </div>
               </div>
 
@@ -89,20 +118,6 @@ import { NgClass } from '@angular/common';
                 }
               </button>
             </div>
-
-            <!-- Response -->
-            @if (resNoRedis(); as res) {
-              @if (!res.error) {
-                <div class="p-4 rounded-[var(--radius-inner)] bg-black/40 border border-[var(--border-main)] font-mono text-sm">
-                  <div class="flex justify-between items-center mb-2 pb-2 border-b border-[var(--border-main)]/50">
-                    <span class="text-[var(--text-secondary)]">Réponse</span>
-                    <span class="text-emerald-400">{{ res.durationMs }} ms</span>
-                  </div>
-                  <div class="text-white">{{ res.message }}</div>
-                  <div class="text-[var(--text-secondary)] text-xs mt-2">Cible : <span class="text-[var(--accent)]">{{ res.targetService }}</span></div>
-                </div>
-              }
-            }
 
             <!-- Counter -->
             <div class="mt-auto pt-6 border-t border-[var(--border-main)]">
@@ -125,7 +140,6 @@ import { NgClass } from '@angular/common';
 
         <!-- COLONNE DROITE : Avec Redis -->
         <div class="bg-[var(--bg-surface)] rounded-[var(--radius-card)] border border-[var(--border-main)] flex flex-col overflow-hidden relative">
-          <!-- Subtle Glow -->
           <div class="absolute top-0 right-0 w-64 h-64 bg-[var(--primary)]/5 rounded-full blur-[80px] pointer-events-none"></div>
 
           <!-- Header -->
@@ -136,7 +150,6 @@ import { NgClass } from '@angular/common';
                 Avec Redis
               </span>
             </div>
-            <!-- Status Indicator -->
             <div class="flex items-center gap-2 text-sm font-medium" [ngClass]="healthRedis() ? 'text-emerald-400' : 'text-rose-400'">
               <div class="w-2 h-2 rounded-full" [ngClass]="healthRedis() ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'"></div>
               {{ healthRedis() ? 'En ligne' : 'Hors ligne' }}
@@ -145,7 +158,7 @@ import { NgClass } from '@angular/common';
 
           <!-- Body -->
           <div class="p-6 flex-1 overflow-y-auto flex flex-col gap-6 relative z-10">
-            
+
             <!-- Routes List -->
             <div class="flex flex-col gap-3">
               <div class="flex items-center justify-between">
@@ -204,26 +217,53 @@ import { NgClass } from '@angular/common';
             <!-- Action & Animation -->
             <div class="flex flex-col gap-4">
               <!-- Animation Client/Server -->
-              <div class="relative h-16 bg-black/20 rounded-xl px-4 border border-[var(--border-main)] flex items-center justify-between overflow-hidden">
-                <div class="absolute left-10 right-10 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-[var(--border-main)]"></div>
-                
-                <div class="relative z-10 flex flex-col items-center bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
-                  <svg viewBox="0 0 250 250" class="w-5 h-5"><path fill="#DD0031" d="M125 30L31.9 63.2l14.2 123.1L125 230l78.9-43.7 14.2-123.1z"/><path fill="#C3002F" d="M125 30v22.2-.1V230l78.9-43.7 14.2-123.1L125 30z"/><path fill="#FFA3B1" d="M125 52.1L66.8 182.6h21.7l11.7-29.2h49.4l11.7 29.2H183L125 52.1zm17 83.3h-34l17-40.9 17 40.9z"/></svg>
-                </div>
-
-                <div class="absolute top-1/2 -translate-y-1/2 z-20 transition-all duration-300 ease-in-out flex items-center justify-center"
-                     [ngClass]="{
-                       'left-10 opacity-0 scale-50': animStateRedis() === 'idle',
-                       'left-[calc(100%-3.5rem)] opacity-100 scale-100': animStateRedis() === 'sending',
-                       'left-10 opacity-100 scale-100': animStateRedis() === 'returning'
-                     }">
-                  <div class="bg-[var(--primary)] text-white p-1 rounded-full shadow-[0_0_10px_var(--primary)] flex items-center justify-center">
-                    <mat-icon class="text-[14px] w-[14px] h-[14px]">{{ animStateRedis() === 'returning' ? 'mark_email_read' : 'mail' }}</mat-icon>
+              <div class="bg-black/20 rounded-xl border border-[var(--border-main)] p-3">
+                <div class="flex items-stretch gap-2">
+                  <!-- Angular icon (Client) -->
+                  <div class="flex-shrink-0 w-10 flex flex-col items-center justify-center gap-1">
+                    <div class="bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
+                      <svg viewBox="0 0 250 250" class="w-5 h-5"><path fill="#DD0031" d="M125 30L31.9 63.2l14.2 123.1L125 230l78.9-43.7 14.2-123.1z"/><path fill="#C3002F" d="M125 30v22.2-.1V230l78.9-43.7 14.2-123.1L125 30z"/><path fill="#FFA3B1" d="M125 52.1L66.8 182.6h21.7l11.7-29.2h49.4l11.7 29.2H183L125 52.1zm17 83.3h-34l17-40.9 17 40.9z"/></svg>
+                    </div>
+                    <span class="text-[9px] text-[var(--text-secondary)]">Client</span>
                   </div>
-                </div>
 
-                <div class="relative z-10 flex flex-col items-center bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
-                  <mat-icon class="text-emerald-500 w-5 h-5 text-[20px] leading-none">dns</mat-icon>
+                  <!-- Endpoint lanes -->
+                  <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+                    @for (route of routes(); track route.path) {
+                      <div class="relative h-6 flex items-center overflow-hidden">
+                        <div class="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--border-main)]"></div>
+                        <span class="relative z-10 text-[9px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] px-1 rounded">{{ route.path }}</span>
+                        @if (lastResRedis()[route.path]; as res) {
+                          <span class="absolute right-0 z-10 text-[9px] font-mono bg-[var(--bg-surface)] px-1 rounded"
+                                [ngClass]="res.error ? 'text-rose-400' : 'text-emerald-400'">
+                            {{ res.error ? 'ERR' : res.durationMs + 'ms' }}
+                          </span>
+                        }
+                        <!-- Ball -->
+                        <div class="absolute top-1/2 -translate-y-1/2 z-20 transition-all duration-300 ease-in-out"
+                             [ngClass]="getBallClasses(animStatesRedis(), route.path)">
+                          <div class="bg-[var(--primary)] text-white p-0.5 rounded-full shadow-[0_0_6px_var(--primary)] flex items-center justify-center">
+                            <mat-icon class="text-[10px] w-[10px] h-[10px] leading-none">
+                              {{ (animStatesRedis()[route.path] ?? 'idle') === 'returning' ? 'mark_email_read' : 'mail' }}
+                            </mat-icon>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                    @if (routes().length === 0) {
+                      <div class="flex items-center justify-center h-8 text-[10px] text-[var(--text-secondary)] italic">
+                        Aucun endpoint — backend hors ligne
+                      </div>
+                    }
+                  </div>
+
+                  <!-- Server icon -->
+                  <div class="flex-shrink-0 w-10 flex flex-col items-center justify-center gap-1">
+                    <div class="bg-[var(--bg-surface)] p-1.5 rounded-lg border border-[var(--border-main)] shadow-md">
+                      <mat-icon class="text-emerald-500 w-5 h-5 text-[20px] leading-none">dns</mat-icon>
+                    </div>
+                    <span class="text-[9px] text-[var(--text-secondary)]">Serveur</span>
+                  </div>
                 </div>
               </div>
 
@@ -241,20 +281,6 @@ import { NgClass } from '@angular/common';
                 }
               </button>
             </div>
-
-            <!-- Response -->
-            @if (resRedis(); as res) {
-              @if (!res.error) {
-                <div class="p-4 rounded-[var(--radius-inner)] bg-black/40 border border-[var(--border-main)] font-mono text-sm">
-                  <div class="flex justify-between items-center mb-2 pb-2 border-b border-[var(--border-main)]/50">
-                    <span class="text-[var(--text-secondary)]">Réponse</span>
-                    <span class="text-emerald-400">{{ res.durationMs }} ms</span>
-                  </div>
-                  <div class="text-white">{{ res.message }}</div>
-                  <div class="text-[var(--text-secondary)] text-xs mt-2">Cible : <span class="text-[var(--primary)]">{{ res.targetService }}</span></div>
-                </div>
-              }
-            }
 
             <!-- Counter -->
             <div class="mt-auto pt-6 border-t border-[var(--border-main)]">
@@ -286,21 +312,22 @@ export class GatewayComponent {
   healthNoRedis = signal<boolean>(false);
   healthRedis = signal<boolean>(false);
 
-  resNoRedis = signal<HelloResponse | null>(null);
-  resRedis = signal<HelloResponse | null>(null);
-
   lostRequests = signal<number>(0);
   successfulRequests = signal<number>(0);
 
+  noRedisEndpoints = signal<RouteDef[]>([]);
   routes = signal<RouteDef[]>([]);
 
-  animStateNoRedis = signal<'idle' | 'sending' | 'returning'>('idle');
-  animStateRedis = signal<'idle' | 'sending' | 'returning'>('idle');
+  animStatesNoRedis = signal<Partial<Record<string, AnimState>>>({});
+  animStatesRedis = signal<Partial<Record<string, AnimState>>>({});
+
+  lastResNoRedis = signal<Partial<Record<string, HelloResponse>>>({});
+  lastResRedis = signal<Partial<Record<string, HelloResponse>>>({});
 
   isRunningNoRedis = signal(false);
   isRunningRedis = signal(false);
 
-  private readonly FIRE_INTERVAL_MS = 1000;
+  private readonly FIRE_INTERVAL_MS = 1200;
 
   // Form
   routeForm = new FormGroup({
@@ -310,70 +337,101 @@ export class GatewayComponent {
   });
 
   constructor() {
-    // Polling Health No Redis (500ms)
+    // Health polling
     interval(500).pipe(
       switchMap(() => this.gatewayService.checkHealth(false)),
       takeUntilDestroyed()
     ).subscribe(status => this.healthNoRedis.set(status));
 
-    // Polling Health Redis (500ms)
     interval(500).pipe(
       switchMap(() => this.gatewayService.checkHealth(true)),
       takeUntilDestroyed()
     ).subscribe(status => this.healthRedis.set(status));
 
-    // Polling Routes Redis (2s)
+    // No-redis routes polling (5s + immediate)
+    this.gatewayService.getNoRedisRoutes().subscribe(r => this.noRedisEndpoints.set(r));
+    interval(5000).pipe(
+      switchMap(() => this.gatewayService.getNoRedisRoutes()),
+      takeUntilDestroyed()
+    ).subscribe(r => this.noRedisEndpoints.set(r));
+
+    // Redis routes polling (2s)
     interval(2000).pipe(
       switchMap(() => this.gatewayService.getRoutes()),
       takeUntilDestroyed()
-    ).subscribe(routes => this.routes.set(routes));
+    ).subscribe(r => this.routes.set(r));
 
-    // Tir automatique No Redis
+    // Auto-fire No Redis — all endpoints in parallel
     interval(this.FIRE_INTERVAL_MS).pipe(
       filter(() => this.isRunningNoRedis()),
-      switchMap(() => this.gatewayService.getHello(false)),
+      switchMap(() => {
+        const paths = this.noRedisEndpoints().map(r => r.path);
+        if (paths.length === 0) return EMPTY;
+        return forkJoin(paths.map(path =>
+          this.gatewayService.callEndpoint(false, path).pipe(map(res => ({ path, res })))
+        ));
+      }),
       takeUntilDestroyed()
-    ).subscribe(res => {
-      this.resNoRedis.set(res);
-      if (res.error) {
-        this.lostRequests.update(v => v + 1);
-      }
-      this.animStateNoRedis.set('sending');
-      setTimeout(() => this.animStateNoRedis.set('returning'), 300);
-      setTimeout(() => this.animStateNoRedis.set('idle'), 600);
+    ).subscribe(results => {
+      results.forEach(({ path, res }) => {
+        if (res.error) this.lostRequests.update(v => v + 1);
+        this.lastResNoRedis.update(r => ({ ...r, [path]: res }));
+        this.triggerAnim(this.animStatesNoRedis, path);
+      });
     });
 
-    // Tir automatique Redis
+    // Auto-fire Redis — all routes in parallel
     interval(this.FIRE_INTERVAL_MS).pipe(
       filter(() => this.isRunningRedis()),
-      switchMap(() => this.gatewayService.getHello(true)),
+      switchMap(() => {
+        const paths = this.routes().map(r => r.path);
+        if (paths.length === 0) return EMPTY;
+        return forkJoin(paths.map(path =>
+          this.gatewayService.callEndpoint(true, path).pipe(map(res => ({ path, res })))
+        ));
+      }),
       takeUntilDestroyed()
-    ).subscribe(res => {
-      this.resRedis.set(res);
-      if (!res.error) {
-        this.successfulRequests.update(v => v + 1);
-      }
-      this.animStateRedis.set('sending');
-      setTimeout(() => this.animStateRedis.set('returning'), 300);
-      setTimeout(() => this.animStateRedis.set('idle'), 600);
+    ).subscribe(results => {
+      results.forEach(({ path, res }) => {
+        if (!res.error) this.successfulRequests.update(v => v + 1);
+        this.lastResRedis.update(r => ({ ...r, [path]: res }));
+        this.triggerAnim(this.animStatesRedis, path);
+      });
     });
   }
 
-  toggleNoRedis() {
-    this.isRunningNoRedis.update(v => !v);
+  /** Triggers the 4-step Angular→Server→Angular animation for a single endpoint lane. */
+  private triggerAnim(statesSignal: WritableSignal<Partial<Record<string, AnimState>>>, path: string): void {
+    statesSignal.update(s => ({ ...s, [path]: 'departing' }));
+    setTimeout(() => statesSignal.update(s => ({ ...s, [path]: 'sending' })), 150);
+    setTimeout(() => statesSignal.update(s => ({ ...s, [path]: 'returning' })), 450);
+    setTimeout(() => statesSignal.update(s => ({ ...s, [path]: 'idle' })), 750);
   }
 
-  toggleRedis() {
-    this.isRunningRedis.update(v => !v);
+  /** Returns ngClass object for the animated ball in a given endpoint lane. */
+  getBallClasses(states: Partial<Record<string, AnimState>>, path: string): Record<string, boolean> {
+    const state = states[path] ?? 'idle';
+    const sending = state === 'sending';
+    const idle = state === 'idle';
+    return {
+      'left-0': !sending,
+      'left-[calc(100%-14px)]': sending,
+      'opacity-0': idle,
+      'opacity-100': !idle,
+      'scale-50': idle,
+      'scale-100': !idle,
+    };
   }
+
+  toggleNoRedis() { this.isRunningNoRedis.update(v => !v); }
+  toggleRedis()   { this.isRunningRedis.update(v => !v); }
 
   addRoute() {
     if (this.routeForm.valid) {
       const newRoute = this.routeForm.getRawValue();
       this.gatewayService.addRoute(newRoute).subscribe(success => {
         if (success) {
-          // Force refresh routes immediately
-          this.gatewayService.getRoutes().subscribe(routes => this.routes.set(routes));
+          this.gatewayService.getRoutes().subscribe(r => this.routes.set(r));
           this.routeForm.reset({ path: '/api/new', destination: 'service-b', active: true });
         }
       });
@@ -384,7 +442,7 @@ export class GatewayComponent {
     const updatedRoute = { ...route, maintenance: !route.maintenance };
     this.gatewayService.updateRoute(updatedRoute).subscribe(success => {
       if (success) {
-        this.gatewayService.getRoutes().subscribe(routes => this.routes.set(routes));
+        this.gatewayService.getRoutes().subscribe(r => this.routes.set(r));
       }
     });
   }
