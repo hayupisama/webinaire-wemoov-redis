@@ -4,17 +4,21 @@
 
 ```bash
 # 1. Démarrer tous les backends + Redis + PostgreSQL
+cd backend
 docker compose up -d
 
 # 2. Vérifier que tout est up
 docker compose ps
 
-# 3. Démarrer le frontend Angular
+# 3. Démarrer le frontend Angular (depuis la racine du projet)
+cd ..
 npm run dev
 # → http://localhost:3000
 ```
 
 Attendre que toutes les pastilles soient **vertes** dans l'UI avant de commencer.
+
+> **Sans backend** : `npm run start:mocked` lance le frontend avec des données simulées (aucun Docker nécessaire).
 
 ---
 
@@ -26,14 +30,14 @@ Attendre que toutes les pastilles soient **vertes** dans l'UI avant de commencer
 # ÉTAPE 1 — Les deux tirs sont lancés via l'UI (boutons "Démarrer le tir automatique")
 
 # ÉTAPE 2 — Simuler un redémarrage de la gateway sans Redis
-docker stop gateway-no-redis
+docker stop redis-demo-gateway-no-redis
 # → compteur "Requêtes perdues" monte automatiquement côté gauche
 
 # Pendant ce temps : modifier une route via le formulaire côté droit (avec Redis)
 # → la liste se met à jour immédiatement, le tir de droite continue sans interruption
 
 # ÉTAPE 3 — "Redémarrage terminé"
-docker start gateway-no-redis
+docker start redis-demo-gateway-no-redis
 # → pastille repasse verte, les pertes s'arrêtent
 
 # Reset via les boutons refresh dans l'UI avant de passer à la suite
@@ -126,6 +130,8 @@ docker start redis-demo-consumer
 
 ## Commandes utiles en cas de problème
 
+> Les commandes `docker compose` sont à lancer depuis le dossier `backend/`.
+
 ```bash
 # Voir l'état de tous les services
 docker compose ps
@@ -142,16 +148,16 @@ docker compose restart gateway-redis
 docker compose down && docker compose up -d
 
 # Accès direct Redis (debug)
-docker exec -it redis redis-cli
+docker exec -it redis-demo redis-cli
 
 # Vérifier les routes stockées dans Redis (démo Gateway)
-docker exec -it redis redis-cli KEYS "route:*"
+docker exec -it redis-demo redis-cli KEYS "route:*"
 
 # Vérifier le stream (démo Streams)
-docker exec -it redis redis-cli XLEN events
+docker exec -it redis-demo redis-cli XLEN events
 
 # Voir le compteur rate limiting
-docker exec -it redis redis-cli GET rate:global
+docker exec -it redis-demo redis-cli GET rate:global
 ```
 
 ---
@@ -170,3 +176,20 @@ docker exec -it redis redis-cli GET rate:global
 | Locks | http://localhost:8086/health |
 | Geo | http://localhost:8087/health |
 | TTL | http://localhost:8088/health |
+
+## Noms des containers Docker
+
+| Service | Container |
+|---|---|
+| Redis | `redis-demo` |
+| PostgreSQL | `redis-demo-postgres` |
+| Gateway sans Redis | `redis-demo-gateway-no-redis` |
+| Gateway avec Redis | `redis-demo-gateway-redis` |
+| Rate Limiting sans Redis | `redis-demo-ratelimit-no-redis` |
+| Rate Limiting avec Redis | `redis-demo-ratelimit-redis` |
+| Streams Producer | `redis-demo-streams-producer` |
+| Streams Consumer | `redis-demo-consumer` |
+| Streams Proxy (nginx) | `redis-demo-streams-proxy` |
+| Locks | `redis-demo-locks` |
+| Geo | `redis-demo-geo` |
+| TTL | `redis-demo-ttl` |
