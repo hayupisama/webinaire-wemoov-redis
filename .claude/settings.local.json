@@ -9,7 +9,13 @@
       "Bash(npx ng:*)",
       "Bash(chmod +x /home/hayupi/Téléchargements/redis-demo-platform/demo.sh)",
       "Bash(bash -n /home/hayupi/Téléchargements/redis-demo-platform/demo.sh)",
-      "Bash(grep -oP '`[^`]+`')"
+      "Bash(grep -oP '`[^`]+`')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); configs=d['projects']['app']['architect']['build']['configurations']; print\\(json.dumps\\(configs, indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(python3:*)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs cat:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

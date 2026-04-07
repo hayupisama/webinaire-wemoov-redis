@@ -17,7 +17,7 @@ const FEATURE_FILTERS: Record<string, { include?: string[]; exclude?: string[] }
   gateway:        { exclude: ['/health', '/api/routes'] },
   'rate-limiting':{ include: ['/api/rate/hit'] },
   streams:        { include: ['/api/publish'] },
-  locks:          { include: ['/api/debit/concurrent'] },
+  locks:          { include: ['/api/debit/concurrent', '/api/concert/book', '/api/concert/release', '/api/concert/reset'] },
   geo:            { include: ['/api/geo/search'] },
   ttl:            { exclude: ['/health'] },
 };
@@ -120,7 +120,8 @@ const FEATURE_FILTERS: Record<string, { include?: string[]; exclude?: string[] }
             <div class="divide-y divide-[var(--border-main)]">
               @for (log of featureLogs(); track log.id) {
                 <div
-                  class="px-4 py-3 hover:bg-white/5 cursor-pointer transition-colors"
+                  class="px-3 py-2.5 cursor-pointer transition-colors border-l-[3px]"
+                  [class]="rowClass(log.status)"
                   (click)="toggleBody(log.id)"
                 >
                   <!-- Row 1: method + url + status -->
@@ -133,8 +134,8 @@ const FEATURE_FILTERS: Record<string, { include?: string[]; exclude?: string[] }
                       {{ shortPath(log.url) }}
                     </span>
                     <span
-                      class="shrink-0 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded"
-                      [class]="statusClass(log.status)"
+                      class="shrink-0 text-[11px] font-black font-mono px-2 py-0.5 rounded-md"
+                      [class]="statusBadgeClass(log.status)"
                     >{{ log.status }}</span>
                   </div>
                   <!-- Row 2: port + duration + time -->
@@ -151,7 +152,7 @@ const FEATURE_FILTERS: Record<string, { include?: string[]; exclude?: string[] }
                   </div>
                   <!-- Body (expandable) -->
                   @if (expandedIds().has(log.id) && log.body != null) {
-                    <pre class="mt-2 text-[10px] font-mono bg-[var(--bg-main)] rounded-lg p-2 overflow-x-auto text-green-300 max-h-48 overflow-y-auto border border-[var(--border-main)]">{{ formatBody(log.body) }}</pre>
+                    <pre class="mt-2 text-[10px] font-mono bg-black/30 rounded-lg p-2 overflow-x-auto text-green-300 max-h-48 overflow-y-auto border border-white/10">{{ formatBody(log.body) }}</pre>
                   }
                 </div>
               }
@@ -275,6 +276,22 @@ export class RequestPanelComponent {
     try { return JSON.stringify(body, null, 2); } catch { return String(body); }
   }
 
+  rowClass(status: number): string {
+    if (status >= 500) return 'bg-red-500/10 border-l-red-500 hover:bg-red-500/20';
+    if (status === 429) return 'bg-orange-500/10 border-l-orange-400 hover:bg-orange-500/20';
+    if (status >= 400) return 'bg-yellow-500/10 border-l-yellow-400 hover:bg-yellow-500/20';
+    if (status >= 200 && status < 300) return 'bg-green-500/[0.07] border-l-green-500 hover:bg-green-500/15';
+    return 'bg-white/5 border-l-white/20 hover:bg-white/10';
+  }
+
+  statusBadgeClass(status: number): string {
+    if (status >= 500) return 'bg-red-500/30 text-red-300 ring-1 ring-red-500/50';
+    if (status === 429) return 'bg-orange-500/30 text-orange-200 ring-1 ring-orange-400/50';
+    if (status >= 400) return 'bg-yellow-500/30 text-yellow-200 ring-1 ring-yellow-400/50';
+    if (status >= 200 && status < 300) return 'bg-green-500/25 text-green-300 ring-1 ring-green-500/40';
+    return 'bg-gray-500/20 text-gray-300';
+  }
+
   methodClass(method: string): string {
     const classes: Record<string, string> = {
       GET:    'bg-blue-500/20 text-blue-300',
@@ -284,14 +301,6 @@ export class RequestPanelComponent {
       DELETE: 'bg-red-500/20 text-red-300',
     };
     return classes[method] ?? 'bg-gray-500/20 text-gray-300';
-  }
-
-  statusClass(status: number): string {
-    if (status >= 500) return 'bg-red-500/20 text-red-300';
-    if (status === 429) return 'bg-orange-500/20 text-orange-300';
-    if (status >= 400) return 'bg-yellow-500/20 text-yellow-300';
-    if (status >= 200) return 'bg-green-500/20 text-green-300';
-    return 'bg-gray-500/20 text-gray-300';
   }
 
   durationClass(ms: number): string {
