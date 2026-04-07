@@ -60,17 +60,6 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
-            },
-            "mocked": {
-              "optimization": false,
-              "extractLicenses": false,
-              "sourceMap": true,
-              "fileReplacements": [
-                {
-                  "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.mocked.ts"
-                }
-              ]
             }
           },
           "defaultConfiguration": "production"
@@ -83,9 +72,6 @@
             },
             "development": {
               "buildTarget": "app:build:development"
-            },
-            "mocked": {
-              "buildTarget": "app:build:mocked"
             }
           },
           "defaultConfiguration": "development"
